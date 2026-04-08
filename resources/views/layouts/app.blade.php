@@ -6,7 +6,8 @@
     <title>Pokédex Web</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
-<style>
+    
+    <style>
         /* Fondo general y tipografía */
         body { 
             font-family: 'Nunito', sans-serif; 
@@ -79,19 +80,61 @@
         .form-control::placeholder {
             color: #64748b;
         }
+        
+        /* Ajuste para el dropdown (menú desplegable) de Bootstrap */
+        .dropdown-menu {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+        }
+        .dropdown-item {
+            color: #e2e8f0;
+        }
+        .dropdown-item:hover {
+            background-color: #0f172a;
+            color: #ffffff;
+        }
     </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark navbar-custom shadow-sm">
         <div class="container">
             <a class="navbar-brand fw-bold" href="/">Pokédex Web</a>
+            
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
+            
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="{{ route('pokemon.index') }}">Pokémon</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('about') }}">Acerca de</a></li>
+                    @auth
+                        <li class="nav-item"><a class="nav-link" href="{{ route('pokemon.index') }}">Pokémon</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ route('about') }}">Acerca de</a></li>
+                    @endauth
+                </ul>
+                
+                <ul class="navbar-nav ms-auto">
+                    @guest
+                        <li class="nav-item">
+                            <a class="nav-link fw-bold" href="{{ route('login') }}">Iniciar Sesión</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="btn btn-custom ms-2 shadow-sm" href="{{ route('register') }}">Registrarse</a>
+                        </li>
+                    @else
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle text-white fw-bold" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                {{ Auth::user()->name }}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
+                                <li>
+                                    <form method="POST" action="{{ route('logout') }}">
+                                        @csrf
+                                        <button type="submit" class="dropdown-item text-danger fw-bold" style="background: transparent; border: none; width: 100%; text-align: left;">Cerrar Sesión</button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </li>
+                    @endguest
                 </ul>
             </div>
         </div>
