@@ -9,14 +9,18 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up()
+public function up()
     {
         Schema::create('pokemon', function (Blueprint $table) {
             $table->id();
             $table->string('name');
             $table->string('type');
-            $table->string('image_url')->nullable(); // nullable() permite que esté vacío
-            $table->timestamps(); // Crea automáticamente columnas created_at y updated_at
+            $table->string('image');
+            $table->string('animated');
+            $table->integer('hp')->default(0);
+            $table->integer('attack')->default(0);
+            $table->integer('defense')->default(0);
+            $table->timestamps();
         });
     }
 

@@ -4,7 +4,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Cache; // Esta línea es vital para que no marque error
+use Illuminate\Support\Facades\Storage;
+use App\Models\Pokemon;
 
 class PokemonController extends Controller
 {
@@ -12,34 +13,65 @@ class PokemonController extends Controller
     {
         $error = null;
 
-        // Se usa la nueva memoria 'pokemons_list_v2' para tener la carga rápida
-        $pokemons = Cache::remember('pokemons_list_v2', 86400, function () {
-            
+        // Si la BD está vacía, nos conectamos a internet UNA SOLA VEZ para descargar todo
+        if (Pokemon::count() == 0) {
             $response = Http::withoutVerifying()->get('https://pokeapi.co/api/v2/pokemon?limit=20');
             $results = $response->successful() ? $response->json()['results'] : [];
-            $tempPokemons = [];
+
+            $pokemonsParaJson = []; // Arreglo para almacenar datos y enviarlos al JSON
 
             foreach ($results as $item) {
-                $urlParts = explode('/', rtrim($item['url'], '/'));
-                $id = end($urlParts);
-
                 $detailResponse = Http::withoutVerifying()->get($item['url']);
-                $type = 'normal';
+                
                 if ($detailResponse->successful()) {
-                    $type = $detailResponse->json()['types'][0]['type']['name'];
-                }
+                    $data = $detailResponse->json();
+                    $id = $data['id'];
+                    $name = ucfirst($data['name']);
+                    $type = $data['types'][0]['type']['name'];
 
-                $tempPokemons[] = [
-                    'id' => $id,
-                    'name' => ucfirst($item['name']),
-                    'type' => $type,
-                    'image' => "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{$id}.png",
-                    'animated' => "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/{$id}.gif"
-                ];
+                    // 1. Extraer Estadísticas
+                    $hp = 0; $attack = 0; $defense = 0;
+                    foreach ($data['stats'] as $stat) {
+                        if ($stat['stat']['name'] == 'hp') $hp = $stat['base_stat'];
+                        if ($stat['stat']['name'] == 'attack') $attack = $stat['base_stat'];
+                        if ($stat['stat']['name'] == 'defense') $defense = $stat['base_stat'];
+                    }
+
+                    // 2. Descargar las imágenes a la computadora
+                    $imageUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{$id}.png";
+                    $animatedUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/{$id}.gif";
+
+                    $imageContents = Http::withoutVerifying()->get($imageUrl)->body();
+                    
+                    // Si falla la animada, usamos la estática de respaldo
+                    $animatedResponse = Http::withoutVerifying()->get($animatedUrl);
+                    $animatedContents = $animatedResponse->successful() ? $animatedResponse->body() : $imageContents;
+
+                    // 3. Guardar físicamente en storage/app/public/pokemon/
+                    $imagePath = "pokemon/{$id}.png";
+                    $animatedPath = "pokemon/{$id}.gif";
+                    Storage::disk('public')->put($imagePath, $imageContents);
+                    Storage::disk('public')->put($animatedPath, $animatedContents);
+
+                    // 4. Guardar en Base de Datos Local
+                    $nuevoPokemon = Pokemon::create([
+                        'name' => $name,
+                        'type' => $type,
+                        'image' => "/storage/" . $imagePath,
+                        'animated' => "/storage/" . $animatedPath,
+                        'hp' => $hp,
+                        'attack' => $attack,
+                        'defense' => $defense
+                    ]);
+
+                    // 5. Agregar al arreglo del JSON
+                    $pokemonsParaJson[] = $nuevoPokemon->toArray();
+                }
             }
-            
-            return $tempPokemons;
-        });
+
+            // 6. Generar el archivo JSON localmente
+            Storage::disk('public')->put('pokemons.json', json_encode($pokemonsParaJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        }
 
         // Lógica del buscador
         if ($request->has('search')) {
@@ -47,11 +79,12 @@ class PokemonController extends Controller
 
             if (empty($busqueda)) {
                 $error = 'Por favor, ingresa un nombre para buscar.';
+                $pokemons = Pokemon::all()->toArray(); 
             } else {
-                $pokemons = array_filter($pokemons, function ($pokemon) use ($busqueda) {
-                    return stripos($pokemon['name'], $busqueda) !== false;
-                });
+                $pokemons = Pokemon::where('name', 'LIKE', '%' . $busqueda . '%')->get()->toArray();
             }
+        } else {
+            $pokemons = Pokemon::all()->toArray();
         }
 
         return view('pokemon.index', [
@@ -62,27 +95,24 @@ class PokemonController extends Controller
 
     public function show($name)
     {
-        $response = Http::withoutVerifying()->get("https://pokeapi.co/api/v2/pokemon/" . strtolower($name));
+        // AHORA LEE LOCALMENTE: Busca en la base de datos en lugar de la API
+        $pokemonModel = Pokemon::where('name', ucfirst($name))->orWhere('name', strtolower($name))->first();
 
-        if ($response->failed()) {
+        if (!$pokemonModel) {
             return view('pokemon.error', ['name' => $name]);
         }
 
-        $data = $response->json();
-
-        $stats = [];
-        foreach ($data['stats'] as $stat) {
-            if (in_array($stat['stat']['name'], ['hp', 'attack', 'defense'])) {
-                $stats[$stat['stat']['name']] = $stat['base_stat'];
-            }
-        }
-
+        // Preparamos los datos con la misma estructura que esperaba tu vista original
         $pokemon = [
-            'name' => ucfirst($data['name']),
-            'image' => $data['sprites']['front_default'],
-            'animated' => $data['sprites']['other']['showdown']['front_default'] ?? $data['sprites']['front_default'],
-            'types' => array_map(function($type) { return $type['type']['name']; }, $data['types']),
-            'stats' => $stats
+            'name' => $pokemonModel->name,
+            'image' => $pokemonModel->image,
+            'animated' => $pokemonModel->animated,
+            'types' => [$pokemonModel->type], 
+            'stats' => [
+                'hp' => $pokemonModel->hp,
+                'attack' => $pokemonModel->attack,
+                'defense' => $pokemonModel->defense
+            ]
         ];
 
         return view('pokemon.show', ['pokemon' => $pokemon]);
