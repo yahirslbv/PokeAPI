@@ -55,7 +55,9 @@ $typeColors = [
         </div>
     </div>
     @empty
-    <div class="col-12 text-center"><p class="text-muted fs-5">No se encontró ningún Pokémon con ese nombre.</p></div>
+        <div class="col-12 d-flex justify-content-center w-100 mt-5">
+            <p class="text-muted fs-5 text-center">No se encontró ningún Pokémon con ese nombre.</p>
+        </div>
     @endforelse
 </div>
 @endsection
