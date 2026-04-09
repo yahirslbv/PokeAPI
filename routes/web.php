@@ -4,10 +4,22 @@ use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\PokemonController;
 
-// Raíz: pantalla de bienvenida nativa de Laravel
+// Raíz: Ahora configurada para mostrar 'home' por defecto al abrir el proyecto
 Route::get('/', function () {
-    return view('welcome');
-});
+    return view('home');
+})->name('home');
+
+/* * Nota: Si se prefiere mantener la vista de bienvenida nativa de Laravel en la raíz 
+ * y acceder a 'home' escribiendo "/home" en la URL, se debe usar este código en su lugar:
+ *
+ * Route::get('/', function () {
+ * return view('welcome');
+ * });
+ *
+ * Route::get('/home', function () {
+ * return view('home');
+ * })->name('home');
+ */
 
 // Rutas protegidas por autenticación
 Route::middleware('auth')->group(function () {
