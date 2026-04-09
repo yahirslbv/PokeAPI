@@ -75,13 +75,74 @@ class PokemonController extends Controller
 
         // Lógica del buscador
         if ($request->has('search')) {
-            $busqueda = trim($request->input('search'));
+            // Se convierte a minúsculas porque la PokeAPI exige el formato en minúsculas
+            $busqueda = strtolower(trim($request->input('search')));
 
             if (empty($busqueda)) {
                 $error = 'Por favor, ingresa un nombre para buscar.';
                 $pokemons = Pokemon::all()->toArray(); 
             } else {
+                // 1. Intentar buscar en la base de datos local primero
                 $pokemons = Pokemon::where('name', 'LIKE', '%' . $busqueda . '%')->get()->toArray();
+
+                // 2. Si no hay resultados locales, hacemos la petición a la PokeAPI
+                if (empty($pokemons)) {
+                    $detailResponse = Http::withoutVerifying()->get("https://pokeapi.co/api/v2/pokemon/{$busqueda}");
+
+                    if ($detailResponse->successful()) {
+                        $data = $detailResponse->json();
+                        $id = $data['id'];
+                        $name = ucfirst($data['name']);
+                        
+                        // Validar que el Pokémon tenga tipos antes de extraerlos
+                        $type = isset($data['types'][0]['type']['name']) ? $data['types'][0]['type']['name'] : 'normal';
+
+                        // Extraer Estadísticas
+                        $hp = 0; $attack = 0; $defense = 0;
+                        foreach ($data['stats'] as $stat) {
+                            if ($stat['stat']['name'] == 'hp') $hp = $stat['base_stat'];
+                            if ($stat['stat']['name'] == 'attack') $attack = $stat['base_stat'];
+                            if ($stat['stat']['name'] == 'defense') $defense = $stat['base_stat'];
+                        }
+
+                        // Descargar las imágenes a la computadora
+                        $imageUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{$id}.png";
+                        $animatedUrl = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/{$id}.gif";
+
+                        $imageContents = Http::withoutVerifying()->get($imageUrl)->body();
+                        
+                        $animatedResponse = Http::withoutVerifying()->get($animatedUrl);
+                        $animatedContents = $animatedResponse->successful() ? $animatedResponse->body() : $imageContents;
+
+                        // Guardar físicamente
+                        $imagePath = "pokemon/{$id}.png";
+                        $animatedPath = "pokemon/{$id}.gif";
+                        Storage::disk('public')->put($imagePath, $imageContents);
+                        Storage::disk('public')->put($animatedPath, $animatedContents);
+
+                        // Guardar en Base de Datos Local
+                        $nuevoPokemon = Pokemon::create([
+                            'name' => $name,
+                            'type' => $type,
+                            'image' => "/storage/" . $imagePath,
+                            'animated' => "/storage/" . $animatedPath,
+                            'hp' => $hp,
+                            'attack' => $attack,
+                            'defense' => $defense
+                        ]);
+
+                        // Asignar el nuevo Pokémon para mostrarlo en la vista
+                        $pokemons = [$nuevoPokemon->toArray()];
+
+                        // Opcional: Actualizar el archivo JSON para incluir el nuevo registro
+                        $todosLosPokemons = Pokemon::all()->toArray();
+                        Storage::disk('public')->put('pokemons.json', json_encode($todosLosPokemons, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+                    } else {
+                        // Si la API devuelve error (ej. nombre incorrecto)
+                        $error = 'No se encontró ningún Pokémon con ese nombre.';
+                    }
+                }
             }
         } else {
             $pokemons = Pokemon::all()->toArray();
