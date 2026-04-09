@@ -22,7 +22,7 @@ Route::middleware('auth')->group(function () {
 
 // Breeze crea una ruta 'dashboard' por defecto. La redirigimos a tu catálogo para mantener el flujo.
 Route::get('/dashboard', function () {
-    return redirect()->route('pokemon.index');
+    return view('dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 // Rutas de perfil que instala Breeze

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - PokeMMO Style</title>
+    <title>Login - Pokédex</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -23,8 +23,9 @@
 <body class="bg-gray-950 text-gray-200 font-sans antialiased">
     <div class="min-h-screen flex items-center justify-center p-4">
         <div class="w-full max-w-md bg-gray-900 p-8 rounded-2xl shadow-xl border border-gray-800">
+            
             <div class="flex flex-col items-center mb-10">
-                <img src="{{ asset('img/pokemmo-logo.png') }}" alt="PokeMMO Logo" class="w-48 h-auto drop-shadow-lg">
+                <img src="{{ asset('img/pokedex_logo.png') }}" alt="Logo Pokédex" class="w-48 h-auto drop-shadow-lg">
             </div>
 
             <x-auth-session-status class="mb-4" :status="session('status')" />
