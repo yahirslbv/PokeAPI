@@ -4,23 +4,26 @@ use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\PokemonController;
 
-// Si alguien entra a la raíz, ve la pantalla de bienvenida nativa de Laravel
+// Raíz: pantalla de bienvenida nativa de Laravel
 Route::get('/', function () {
     return view('welcome');
 });
 
-// Agrupamos nuestras rutas del proyecto bajo el middleware 'auth'
+// Rutas protegidas por autenticación
 Route::middleware('auth')->group(function () {
-    // Si intentan entrar aquí sin iniciar sesión, Laravel los patea al /login automáticamente
+    
+    // Rutas del catálogo de Pokémon
     Route::get('/pokemon', [PokemonController::class, 'index'])->name('pokemon.index');
     Route::get('/pokemon/{name}', [PokemonController::class, 'show'])->name('pokemon.show');
     
+    // Ruta "Acerca de" restaurada
     Route::get('/about', function () {
         return view('about');
     })->name('about');
+    
 });
 
-// Breeze crea una ruta 'dashboard' por defecto. La redirigimos a tu catálogo para mantener el flujo.
+// Ruta del Dashboard configurada correctamente (sin duplicados)
 Route::get('/dashboard', function () {
     return view('dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
