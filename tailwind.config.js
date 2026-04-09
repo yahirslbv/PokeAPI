@@ -3,19 +3,16 @@ import forms from '@tailwindcss/forms';
 
 /** @type {import('tailwindcss').Config} */
 export default {
-    content: [
-        './vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php',
-        './storage/framework/views/*.php',
-        './resources/views/**/*.blade.php',
-    ],
-
+    // ...
     theme: {
         extend: {
-            fontFamily: {
-                sans: ['Figtree', ...defaultTheme.fontFamily.sans],
+            colors: {
+                brand: {
+                    DEFAULT: '#2ec2c3', // Color extraído
+                    dark: '#229e9f',    // Tono más oscuro para hover/focus
+                    light: '#e6f8f8',   // Tono muy claro para textos o fondos suaves
+                },
             },
         },
     },
-
-    plugins: [forms],
 };
