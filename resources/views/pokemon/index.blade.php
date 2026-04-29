@@ -13,52 +13,80 @@ $typeColors = [
 @endphp
 
 <div class="row mb-4">
-<div class="col"><h1 class="text-center fw-bold text-white">Catálogo Pokémon</h1></div>
+    <div class="col"><h1 class="text-center fw-bold text-white">Catálogo Pokémon</h1></div>
 </div>
 
 <div class="row mb-5 justify-content-center">
-    <div class="col-md-6">
-        <form action="{{ route('pokemon.index') }}" method="GET" class="d-flex">
-            <input type="text" name="search" class="form-control me-2 shadow-sm" placeholder="Buscar Pokémon por nombre" value="{{ request('search') }}">
+    <div class="col-md-8">
+        <form action="{{ route('pokemon.index') }}" method="GET" class="d-flex flex-wrap gap-2">
+            <input type="text" name="search" class="form-control shadow-sm" style="flex: 1; min-width: 200px;" placeholder="Buscar por nombre..." value="{{ request('search') }}">
+            <select name="type" class="form-select shadow-sm" style="width: auto;">
+                <option value="">Todos los tipos</option>
+                @foreach($tipos as $tipo)
+                    <option value="{{ $tipo }}" {{ request('type') == $tipo ? 'selected' : '' }}>{{ ucfirst($tipo) }}</option>
+                @endforeach
+            </select>
             <button type="submit" class="btn btn-custom shadow-sm">Buscar</button>
-            @if(request()->has('search'))
-                <a href="{{ route('pokemon.index') }}" class="btn btn-outline-secondary ms-2">Limpiar</a>
+            @if(request()->has('search') || request()->has('type'))
+                <a href="{{ route('pokemon.index') }}" class="btn btn-outline-secondary">Limpiar</a>
             @endif
         </form>
-        @if(isset($error))
-            <div class="text-danger mt-2 small fw-bold text-center">{{ $error }}</div>
-        @endif
     </div>
 </div>
 
 <div class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-4">
     @forelse($pokemons as $pokemon)
     <div class="col">
-        <div class="card h-100 shadow border-0" style="background-color: {{ $typeColors[strtolower($pokemon['type'])] ?? '#f8f9fa' }}; border-radius: 15px;">
-            <div class="text-center pt-3">
+        <div class="card h-100 shadow border-0 position-relative" style="background-color: {{ $typeColors[strtolower($pokemon['types'][0])] ?? '#111827' }}; border-radius: 15px;">
+            
+            @auth
+                <form action="{{ route('pokemon.favorite') }}" method="POST" class="position-absolute" style="top: 10px; right: 10px; z-index: 10;">
+                    @csrf
+                    <input type="hidden" name="name" value="{{ $pokemon['name'] }}">
+                    <button type="submit" class="btn border-0 p-0 shadow-none" style="background: transparent; font-size: 1.5rem; line-height: 1;">
+                        {{ $pokemon['is_favorite'] ? '⭐' : '☆' }}
+                    </button>
+                </form>
+            @endauth
+
+            <div class="text-center pt-4 pokedex-image-container">
                 <img src="{{ $pokemon['image'] }}" 
                      onmouseover="this.src='{{ $pokemon['animated'] }}'" 
                      onmouseout="this.src='{{ $pokemon['image'] }}'" 
-                     class="img-fluid bg-white rounded-circle shadow" 
+                     class="img-fluid pokedex-img-hover"
                      alt="{{ $pokemon['name'] }}" 
-                     style="image-rendering: pixelated; width: 120px; height: 120px; object-fit: contain; border: 4px solid rgba(255,255,255,0.5); transition: transform 0.2s;">
+                     style="image-rendering: pixelated; width: 110px; height: 110px; object-fit: contain;">
             </div>
             
-            <div class="card-body text-center">
+            <div class="card-body text-center mt-2">
                 <h5 class="card-title fw-bold text-white text-shadow" style="text-shadow: 1px 1px 2px rgba(0,0,0,0.5);">
                     <small class="text-white-50">#{{ str_pad($pokemon['pokedex_number'], 3, '0', STR_PAD_LEFT) }}</small> <br>
                     {{ $pokemon['name'] }}
                 </h5>
-                <span class="badge bg-light text-dark mb-3 text-uppercase">{{ $pokemon['type'] }}</span>
-                <br>
+                
+                <div class="mb-3">
+                    @foreach($pokemon['types'] as $type)
+                        <span class="badge bg-dark bg-opacity-25 text-white text-uppercase shadow-sm border border-light border-opacity-10" style="font-size: 0.7rem;">
+                            {{ $type }}
+                        </span>
+                    @endforeach
+                </div>
+
                 <a href="{{ route('pokemon.show', strtolower($pokemon['name'])) }}" class="btn btn-light btn-sm fw-bold w-75 shadow-sm">Ver</a>
             </div>
         </div>
     </div>
     @empty
-        <div class="col-12 d-flex justify-content-center w-100 mt-5">
-            <p class="text-muted fs-5 text-center">No se encontró ningún Pokémon con ese nombre.</p>
+        <div class="col-12 text-center mt-5">
+            <p class="text-muted fs-5">No se encontró ningún Pokémon.</p>
         </div>
     @endforelse
 </div>
+
+<style>
+    .pokedex-image-container { position: relative; }
+    .pokedex-img-hover { transition: transform 0.3s ease, filter 0.3s ease; }
+    .card:hover .pokedex-img-hover { transform: scale(1.1) translateY(-10px); filter: drop-shadow(0 10px 15px rgba(46, 194, 195, 0.6)); }
+    form button:hover { transform: scale(1.2); transition: 0.2s; }
+</style>
 @endsection
