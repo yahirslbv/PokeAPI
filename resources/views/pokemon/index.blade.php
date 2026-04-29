@@ -46,6 +46,7 @@ $typeColors = [
             
             <div class="card-body text-center">
                 <h5 class="card-title fw-bold text-white text-shadow" style="text-shadow: 1px 1px 2px rgba(0,0,0,0.5);">
+                    <small class="text-white-50">#{{ str_pad($pokemon['pokedex_number'], 3, '0', STR_PAD_LEFT) }}</small> <br>
                     {{ $pokemon['name'] }}
                 </h5>
                 <span class="badge bg-light text-dark mb-3 text-uppercase">{{ $pokemon['type'] }}</span>

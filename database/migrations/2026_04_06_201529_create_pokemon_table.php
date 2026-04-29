@@ -6,13 +6,13 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
-public function up()
+    public function up()
     {
         Schema::create('pokemon', function (Blueprint $table) {
             $table->id();
+            // Nueva columna para el número oficial de la PokeAPI
+            $table->integer('pokedex_number'); 
+            
             $table->string('name');
             $table->string('type');
             $table->string('image');
@@ -24,9 +24,6 @@ public function up()
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('pokemon');

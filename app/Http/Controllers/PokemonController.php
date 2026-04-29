@@ -55,6 +55,7 @@ class PokemonController extends Controller
 
                     // 4. Guardar en Base de Datos Local
                     $nuevoPokemon = Pokemon::create([
+                        'pokedex_number' => $id, // <-- Asignación del número de Pokédex
                         'name' => $name,
                         'type' => $type,
                         'image' => "/storage/" . $imagePath,
@@ -122,6 +123,7 @@ class PokemonController extends Controller
 
                         // Guardar en Base de Datos Local
                         $nuevoPokemon = Pokemon::create([
+                            'pokedex_number' => $id, // <-- Asignación del número de Pokédex
                             'name' => $name,
                             'type' => $type,
                             'image' => "/storage/" . $imagePath,
@@ -165,6 +167,7 @@ class PokemonController extends Controller
 
         // Preparamos los datos con la misma estructura que esperaba tu vista original
         $pokemon = [
+            'pokedex_number' => $pokemonModel->pokedex_number, // <-- Se agrega para disponibilidad en la vista
             'name' => $pokemonModel->name,
             'image' => $pokemonModel->image,
             'animated' => $pokemonModel->animated,
