@@ -16,56 +16,62 @@ class PokemonController extends Controller
         $search = strtolower(trim($request->input('search')));
         $typeFilter = strtolower(trim($request->input('type')));
 
-        // 1. Obtener la lista maestra de nombres
-        $allPokemons = Cache::remember('all_pokemon_names_v1', 86400, function () {
-            $response = Http::withoutVerifying()->get('https://pokeapi.co/api/v2/pokemon?limit=1500');
-            return $response->successful() ? $response->json()['results'] : [];
-        });
+        try {
+            // Intentamos obtener la lista de internet
+            $allPokemons = Cache::remember('all_pokemon_names_v1', 86400, function () {
+                $response = Http::timeout(5)->withoutVerifying()->get('https://pokeapi.co/api/v2/pokemon?limit=1500');
+                return $response->successful() ? $response->json()['results'] : [];
+            });
+        } catch (\Exception $e) {
+            // Si no hay internet, usamos solo los guardados localmente para el catálogo
+            $allPokemons = [];
+        }
 
         $filteredList = $allPokemons;
 
-        // 2. Filtro por Tipo
-        if ($typeFilter) {
-            $typeData = Cache::remember("pokemon_type_{$typeFilter}", 86400, function () use ($typeFilter) {
-                $response = Http::withoutVerifying()->get("https://pokeapi.co/api/v2/type/{$typeFilter}");
-                return $response->successful() ? $response->json()['pokemon'] : [];
-            });
-
-            $typeNames = array_map(fn($item) => $item['pokemon']['name'], $typeData);
-            $filteredList = array_filter($filteredList, fn($item) => in_array($item['name'], $typeNames));
+        if ($typeFilter && !empty($filteredList)) {
+            try {
+                $typeData = Cache::remember("pokemon_type_{$typeFilter}", 86400, function () use ($typeFilter) {
+                    $response = Http::timeout(5)->withoutVerifying()->get("https://pokeapi.co/api/v2/type/{$typeFilter}");
+                    return $response->successful() ? $response->json()['pokemon'] : [];
+                });
+                $typeNames = array_map(fn($item) => $item['pokemon']['name'], $typeData);
+                $filteredList = array_filter($filteredList, fn($item) => in_array($item['name'], $typeNames));
+            } catch (\Exception $e) {
+                // Falla silenciosa si no hay red para los filtros
+            }
         }
 
-        // 3. Filtro por Búsqueda
         if ($search) {
             $filteredList = array_filter($filteredList, fn($item) => str_contains($item['name'], $search));
         }
 
         $resultsToFetch = array_slice($filteredList, 0, 20);
-
-        // 4. Obtener detalles con múltiples tipos
         $pokemons = [];
+
         foreach ($resultsToFetch as $item) {
-            $urlParts = explode('/', rtrim($item['url'], '/'));
-            $id = end($urlParts);
+            $id = basename($item['url']);
+            try {
+                $pokemonDetail = Cache::remember("pokemon_detail_v2_{$id}", 86400, function () use ($item) {
+                    $detailResponse = Http::timeout(5)->withoutVerifying()->get($item['url']);
+                    return $detailResponse->successful() ? $detailResponse->json() : null;
+                });
 
-            // Caché v2 para soportar el arreglo de tipos
-            $pokemonDetail = Cache::remember("pokemon_detail_v2_{$id}", 86400, function () use ($item) {
-                $detailResponse = Http::withoutVerifying()->get($item['url']);
-                return $detailResponse->successful() ? $detailResponse->json() : null;
-            });
-
-            if ($pokemonDetail) {
-                $pokemons[] = [
-                    'pokedex_number' => $id,
-                    'name' => ucfirst($pokemonDetail['name']),
-                    'types' => array_map(fn($t) => $t['type']['name'], $pokemonDetail['types']),
-                    'image' => "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{$id}.png",
-                    'animated' => "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/{$id}.gif"
-                ];
+                if ($pokemonDetail) {
+                    $pokemons[] = [
+                        'pokedex_number' => $id,
+                        'name' => ucfirst($pokemonDetail['name']),
+                        'types' => array_map(fn($t) => $t['type']['name'], $pokemonDetail['types']),
+                        'image' => "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{$id}.png",
+                        'animated' => "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/{$id}.gif"
+                    ];
+                }
+            } catch (\Exception $e) {
+                continue;
             }
         }
 
-        // 5. Marcar cuáles son favoritos del usuario actual para la vista del catálogo
+        // Marcar favoritos
         $favNames = Auth::check() ? Pokemon::where('user_id', Auth::id())->pluck('name')->toArray() : [];
         foreach ($pokemons as $key => $p) {
             $pokemons[$key]['is_favorite'] = in_array($p['name'], $favNames);
@@ -79,57 +85,98 @@ class PokemonController extends Controller
     public function show($name)
     {
         $name = strtolower($name);
-        $response = Http::withoutVerifying()->get("https://pokeapi.co/api/v2/pokemon/" . $name);
+        
+        try {
+            // 1. INTENTAMOS CONECTARNOS A INTERNET PRIMERO (con límite de 5 segundos)
+            $response = Http::timeout(5)->withoutVerifying()->get("https://pokeapi.co/api/v2/pokemon/" . $name);
 
-        if ($response->failed()) {
+            if ($response->failed()) {
+                return view('pokemon.error', ['name' => $name]);
+            }
+
+            $data = $response->json();
+            $speciesResponse = Http::withoutVerifying()->get($data['species']['url']);
+            $speciesData = $speciesResponse->successful() ? $speciesResponse->json() : null;
+
+            $descripcion = 'No hay descripción disponible.';
+            $genus = 'Pokémon';
+            $evoluciones = [];
+
+            if ($speciesData) {
+                $esEntry = collect($speciesData['flavor_text_entries'])->firstWhere('language.name', 'es');
+                if ($esEntry) {
+                    $descripcion = str_replace(["\n", "\f", "\r"], " ", $esEntry['flavor_text']);
+                }
+                $esGenus = collect($speciesData['genera'])->firstWhere('language.name', 'es');
+                if ($esGenus) { $genus = $esGenus['genus']; }
+
+                $evolutionResponse = Http::withoutVerifying()->get($speciesData['evolution_chain']['url']);
+                if ($evolutionResponse->successful()) {
+                    $evoluciones = $this->parseEvolutionChain($evolutionResponse->json()['chain']);
+                }
+            }
+
+            $stats = [];
+            foreach ($data['stats'] as $stat) {
+                $stats[$stat['stat']['name']] = $stat['base_stat'];
+            }
+            $stats['total'] = array_sum(array_values($stats));
+
+            $pokemon = [
+                'pokedex_number' => $data['id'],
+                'name' => ucfirst($data['name']),
+                'species' => $genus,
+                'image' => $data['sprites']['front_default'],
+                'animated' => $data['sprites']['other']['showdown']['front_default'] ?? $data['sprites']['front_default'],
+                'types' => array_map(fn($t) => $t['type']['name'], $data['types']),
+                'descripcion' => $descripcion,
+                'height' => $data['height'] / 10,
+                'weight' => $data['weight'] / 10,
+                'stats' => $stats,
+                'evoluciones' => $evoluciones
+            ];
+
+            $esFavorito = Auth::check() && Pokemon::where('user_id', Auth::id())->where('name', $pokemon['name'])->exists();
+            
+            return view('pokemon.show', compact('pokemon', 'esFavorito'));
+
+        } catch (\Exception $e) {
+            // 2. MODO OFFLINE: Si falla la conexión, buscamos en la base de datos local
+            $pokemonLocal = Pokemon::where('name', ucfirst($name))->first();
+
+            if ($pokemonLocal) {
+                // Reconstruimos el arreglo usando los datos de SQLite
+                $pokemon = [
+                    'pokedex_number' => $pokemonLocal->pokedex_number,
+                    'name' => $pokemonLocal->name,
+                    'species' => $pokemonLocal->species ?? 'Pokémon',
+                    'image' => $pokemonLocal->image,
+                    'animated' => $pokemonLocal->animated,
+                    'types' => is_array($pokemonLocal->types) ? $pokemonLocal->types : json_decode($pokemonLocal->types, true) ?? ['desconocido'],
+                    'descripcion' => ($pokemonLocal->description ?? 'Sin descripción') . " (Modo Offline)",
+                    'height' => $pokemonLocal->height ?? 0,
+                    'weight' => $pokemonLocal->weight ?? 0,
+                    'stats' => [
+                        'hp' => $pokemonLocal->hp,
+                        'attack' => $pokemonLocal->attack,
+                        'defense' => $pokemonLocal->defense,
+                        'special-attack' => $pokemonLocal->special_attack ?? 0,
+                        'special-defense' => $pokemonLocal->special_defense ?? 0,
+                        'speed' => $pokemonLocal->speed ?? 0,
+                        'total' => $pokemonLocal->hp + $pokemonLocal->attack + $pokemonLocal->defense + ($pokemonLocal->special_attack ?? 0) + ($pokemonLocal->special_defense ?? 0) + ($pokemonLocal->speed ?? 0)
+                    ],
+                    'evoluciones' => is_array($pokemonLocal->evolution_chain) ? $pokemonLocal->evolution_chain : json_decode($pokemonLocal->evolution_chain, true) ?? []
+                ];
+
+                // Si lo encontramos en la DB local de este usuario, marcamos la estrella
+                $esFavorito = Auth::check() && $pokemonLocal->user_id === Auth::id();
+                
+                return view('pokemon.show', compact('pokemon', 'esFavorito'));
+            }
+
+            // Si no hay internet y tampoco está guardado en SQLite, mandamos a la vista de error
             return view('pokemon.error', ['name' => $name]);
         }
-
-        $data = $response->json();
-        $speciesResponse = Http::withoutVerifying()->get($data['species']['url']);
-        $speciesData = $speciesResponse->successful() ? $speciesResponse->json() : null;
-
-        $descripcion = 'No hay descripción disponible.';
-        $genus = 'Pokémon';
-        $evoluciones = [];
-
-        if ($speciesData) {
-            $esEntry = collect($speciesData['flavor_text_entries'])->firstWhere('language.name', 'es');
-            if ($esEntry) {
-                $descripcion = str_replace(["\n", "\f", "\r"], " ", $esEntry['flavor_text']);
-            }
-            $esGenus = collect($speciesData['genera'])->firstWhere('language.name', 'es');
-            if ($esGenus) { $genus = $esGenus['genus']; }
-
-            $evolutionResponse = Http::withoutVerifying()->get($speciesData['evolution_chain']['url']);
-            if ($evolutionResponse->successful()) {
-                $evoluciones = $this->parseEvolutionChain($evolutionResponse->json()['chain']);
-            }
-        }
-
-        $stats = [];
-        foreach ($data['stats'] as $stat) {
-            $stats[$stat['stat']['name']] = $stat['base_stat'];
-        }
-        $stats['total'] = array_sum(array_values($stats));
-
-        $pokemon = [
-            'pokedex_number' => $data['id'],
-            'name' => ucfirst($data['name']),
-            'species' => $genus,
-            'image' => $data['sprites']['front_default'],
-            'animated' => $data['sprites']['other']['showdown']['front_default'] ?? $data['sprites']['front_default'],
-            'types' => array_map(fn($t) => $t['type']['name'], $data['types']),
-            'descripcion' => $descripcion,
-            'height' => $data['height'] / 10,
-            'weight' => $data['weight'] / 10,
-            'stats' => $stats,
-            'evoluciones' => $evoluciones
-        ];
-
-        $esFavorito = Auth::check() && Pokemon::where('user_id', Auth::id())->where('name', $pokemon['name'])->exists();
-        
-        return view('pokemon.show', compact('pokemon', 'esFavorito'));
     }
 
     private function parseEvolutionChain($chain)
@@ -160,34 +207,56 @@ class PokemonController extends Controller
             return back()->with('success', 'Eliminado de favoritos.');
         }
 
-        $data = Http::withoutVerifying()->get("https://pokeapi.co/api/v2/pokemon/".strtolower($name))->json();
-        $id = $data['id'];
+        try {
+            // Descargamos datos básicos
+            $data = Http::timeout(5)->withoutVerifying()->get("https://pokeapi.co/api/v2/pokemon/".strtolower($name))->json();
+            $id = $data['id'];
 
-        $imgCont = Http::withoutVerifying()->get($data['sprites']['front_default'])->body();
-        $animUrl = $data['sprites']['other']['showdown']['front_default'] ?? $data['sprites']['front_default'];
-        $animCont = Http::withoutVerifying()->get($animUrl)->body();
+            // Descargamos datos de especie para la descripción y evolución
+            $speciesResponse = Http::timeout(5)->withoutVerifying()->get($data['species']['url'])->json();
+            $desc = collect($speciesResponse['flavor_text_entries'])->firstWhere('language.name', 'es')['flavor_text'] ?? 'Sin descripción';
+            $genus = collect($speciesResponse['genera'])->firstWhere('language.name', 'es')['genus'] ?? 'Pokémon';
+            
+            $evoResponse = Http::timeout(5)->withoutVerifying()->get($speciesResponse['evolution_chain']['url'])->json();
+            $evoluciones = $this->parseEvolutionChain($evoResponse['chain']);
 
-        Storage::disk('public')->put("pokemon/{$id}.png", $imgCont);
-        Storage::disk('public')->put("pokemon/{$id}.gif", $animCont);
+            // Descargamos imágenes
+            $imgCont = Http::timeout(5)->withoutVerifying()->get($data['sprites']['front_default'])->body();
+            $animUrl = $data['sprites']['other']['showdown']['front_default'] ?? $data['sprites']['front_default'];
+            $animCont = Http::timeout(5)->withoutVerifying()->get($animUrl)->body();
 
-        Pokemon::create([
-            'user_id' => $userId,
-            'pokedex_number' => $id,
-            'name' => $name,
-            'type' => $data['types'][0]['type']['name'],
-            'image' => "/storage/pokemon/{$id}.png",
-            'animated' => "/storage/pokemon/{$id}.gif",
-            'hp' => $data['stats'][0]['base_stat'],
-            'attack' => $data['stats'][1]['base_stat'],
-            'defense' => $data['stats'][2]['base_stat'],
-        ]);
+            Storage::disk('public')->put("pokemon/{$id}.png", $imgCont);
+            Storage::disk('public')->put("pokemon/{$id}.gif", $animCont);
 
-        return back()->with('success', 'Guardado en favoritos locales.');
+            // Guardamos todo en la base de datos (Requiere actualización en Migración y Modelo)
+            Pokemon::create([
+                'user_id' => $userId,
+                'pokedex_number' => $id,
+                'name' => $name,
+                'types' => array_map(fn($t) => $t['type']['name'], $data['types']),
+                'image' => "/storage/pokemon/{$id}.png",
+                'animated' => "/storage/pokemon/{$id}.gif",
+                'species' => $genus,
+                'description' => str_replace(["\n", "\f", "\r"], " ", $desc),
+                'height' => $data['height'] / 10,
+                'weight' => $data['weight'] / 10,
+                'hp' => $data['stats'][0]['base_stat'],
+                'attack' => $data['stats'][1]['base_stat'],
+                'defense' => $data['stats'][2]['base_stat'],
+                'special_attack' => $data['stats'][3]['base_stat'],
+                'special_defense' => $data['stats'][4]['base_stat'],
+                'speed' => $data['stats'][5]['base_stat'],
+                'evolution_chain' => $evoluciones
+            ]);
+
+            return back()->with('success', 'Guardado en favoritos locales.');
+        } catch (\Exception $e) {
+            return back()->with('error', 'Error de conexión: No se pudo guardar el Pokémon para modo offline.');
+        }
     }
 
     public function favorites()
     {
-        // Se utiliza toArray() para que sea consistente con la vista index
         $pokemons = Pokemon::where('user_id', Auth::id())->get()->toArray();
         return view('pokemon.favorites', compact('pokemons'));
     }

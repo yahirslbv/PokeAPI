@@ -26,8 +26,15 @@ $typeColors = [
     @else
         <div class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-4">
             @foreach($pokemons as $pokemon)
+                @php
+                    // Convertimos el JSON de SQLite a un arreglo de PHP para poder leer todos los tipos
+                    $tiposArray = is_array($pokemon['types']) ? $pokemon['types'] : json_decode($pokemon['types'], true);
+                    // Tomamos el primer tipo para pintar el fondo de la tarjeta
+                    $tipoPrincipal = $tiposArray[0] ?? 'normal';
+                @endphp
+                
                 <div class="col">
-                    <div class="card h-100 shadow border-0 position-relative" style="background-color: {{ $typeColors[strtolower($pokemon['type'])] ?? '#111827' }}; border-radius: 15px;">
+                    <div class="card h-100 shadow border-0 position-relative" style="background-color: {{ $typeColors[strtolower($tipoPrincipal)] ?? '#111827' }}; border-radius: 15px;">
                         
                         <form action="{{ route('pokemon.favorite') }}" method="POST" class="position-absolute" style="top: 10px; right: 10px; z-index: 10;">
                             @csrf
@@ -53,9 +60,11 @@ $typeColors = [
                             </h5>
                             
                             <div class="mb-3">
-                                <span class="badge bg-dark bg-opacity-25 text-white text-uppercase shadow-sm border border-light border-opacity-10" style="font-size: 0.7rem;">
-                                    {{ $pokemon['type'] }}
-                                </span>
+                                @foreach($tiposArray as $tipo)
+                                    <span class="badge bg-dark bg-opacity-25 text-white text-uppercase shadow-sm border border-light border-opacity-10" style="font-size: 0.7rem;">
+                                        {{ $tipo }}
+                                    </span>
+                                @endforeach
                             </div>
 
                             <a href="{{ route('pokemon.show', strtolower($pokemon['name'])) }}" class="btn btn-light btn-sm fw-bold w-75 shadow-sm">Ver</a>

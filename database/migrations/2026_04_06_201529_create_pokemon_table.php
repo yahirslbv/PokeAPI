@@ -6,19 +6,33 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    public function up()
+   public function up()
 {
     Schema::create('pokemon', function (Blueprint $table) {
         $table->id();
-        $table->foreignId('user_id')->constrained()->onDelete('cascade'); // Relación con el usuario
-        $table->integer('pokedex_number'); // Número oficial
+        $table->foreignId('user_id')->constrained()->onDelete('cascade');
+        $table->integer('pokedex_number');
         $table->string('name');
-        $table->string('type');
-        $table->string('image');    // Ruta local del sprite
-        $table->string('animated'); // Ruta local del GIF
+        
+        $table->text('types');         
+        $table->string('image');
+        $table->string('animated');
+        $table->string('species'); 
+        $table->text('description'); 
+        $table->float('height'); 
+        $table->float('weight'); 
+        
+        // Todas las estadísticas base
         $table->integer('hp')->default(0);
         $table->integer('attack')->default(0);
         $table->integer('defense')->default(0);
+        $table->integer('special_attack')->default(0); 
+        $table->integer('special_defense')->default(0); 
+        $table->integer('speed')->default(0); 
+        
+        // Guardamos la línea evolutiva completa para que funcione offline
+        $table->text('evolution_chain'); 
+        
         $table->timestamps();
     });
 }
