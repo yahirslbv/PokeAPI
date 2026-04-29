@@ -50,8 +50,21 @@ $mainTypeColor = $typeColors[strtolower($pokemon['types'][0])] ?? '#f8f9fa';
                         <small class="text-uppercase text-muted">Defensa</small>
                     </div>
                 </div>
-                
-                <a href="{{ route('pokemon.index') }}" class="btn btn-custom w-100 fs-5 rounded-pill shadow-sm">&larr; Volver al catálogo</a>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <form action="{{ route('pokemon.favorite') }}" method="POST">
+                            @csrf
+                            <input type="hidden" name="name" value="{{ $pokemon['name'] }}">
+                            <button type="submit" class="btn {{ $esFavorito ? 'btn-danger' : 'btn-warning' }} fw-bold shadow w-100 rounded-pill fs-5">
+                                {{ $esFavorito ? ' Quitar Favorito' : ' Agregar a Favoritos' }}
+                            </button>
+                        </form>
+                    </div>
+                    <div class="col-md-6">
+                        <a href="{{ route('pokemon.index') }}" class="btn btn-custom w-100 fs-5 rounded-pill shadow-sm">&larr; Volver al catálogo</a>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

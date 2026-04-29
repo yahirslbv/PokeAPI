@@ -42,6 +42,8 @@ Route::get('/dashboard', function () {
 
 // Rutas de perfil que instala Breeze
 Route::middleware('auth')->group(function () {
+    Route::get('/favoritos', [PokemonController::class, 'favorites'])->name('pokemon.favorites');
+    Route::post('/pokemon/favorite', [PokemonController::class, 'toggleFavorite'])->name('pokemon.favorite');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

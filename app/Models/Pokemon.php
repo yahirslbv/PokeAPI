@@ -6,5 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Pokemon extends Model
 {
-    protected $fillable = ['pokedex_number', 'name', 'type', 'image', 'animated', 'hp', 'attack', 'defense'];
-}
+    // Agregamos pokedex_number a los campos permitidos
+protected $fillable = [
+    'user_id', 'pokedex_number', 'name', 'type', 'image', 'animated', 'hp', 'attack', 'defense'];
+    }

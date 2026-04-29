@@ -119,6 +119,11 @@
                     @auth
                         <li class="nav-item"><a class="nav-link" href="{{ route('dashboard') }}">Dashboard</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ route('pokemon.index') }}">Pokémon</a></li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link fw-bold text-warning" href="{{ route('pokemon.favorites') }}">⭐ Mis Favoritos</a>
+                        </li>
+                        
                         <li class="nav-item"><a class="nav-link" href="{{ route('about') }}">Acerca de</a></li>
                     @endauth
                 </ul>
