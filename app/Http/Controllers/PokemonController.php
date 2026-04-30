@@ -98,8 +98,10 @@ class PokemonController extends Controller
             // USAMOS EL SERVICIO
             $response = $this->pokeApi->getPokemon($name);
 
+            // CORRECCIÓN: Si la API falla (sin internet, timeout, o 404), 
+            // lanzamos una excepción a propósito para forzar que pase al bloque "catch" (Modo Offline).
             if ($response->failed()) {
-                return view('pokemon.error', ['name' => $name]);
+                throw new \Exception("Fallo en la API, intentando modo offline...");
             }
 
             $data = $response->json();
@@ -144,12 +146,18 @@ class PokemonController extends Controller
                 'evoluciones' => $evoluciones
             ];
 
-            $esFavorito = Auth::check() && Pokemon::where('user_id', Auth::id())->where('name', $pokemon['name'])->exists();
+            // Búsqueda más flexible para el botón de favorito
+            $esFavorito = Auth::check() && Pokemon::where('user_id', Auth::id())
+                ->where(function($query) use ($name) {
+                    $query->where('name', ucfirst($name))->orWhere('name', strtolower($name));
+                })->exists();
             
             return view('pokemon.show', compact('pokemon', 'esFavorito'));
 
         } catch (\Exception $e) {
-            $pokemonLocal = Pokemon::where('name', ucfirst($name))->first();
+            
+            // MODO OFFLINE SEGURO: Buscamos contemplando mayúsculas y minúsculas
+            $pokemonLocal = Pokemon::where('name', ucfirst($name))->orWhere('name', strtolower($name))->first();
 
             if ($pokemonLocal) {
                 $pokemon = [
@@ -179,7 +187,8 @@ class PokemonController extends Controller
                 return view('pokemon.show', compact('pokemon', 'esFavorito'));
             }
 
-            return view('pokemon.error', ['name' => $name]);
+            // Si llegamos hasta aquí, es porque NO hay internet y tampoco lo tienes guardado
+            return view('pokemon.error', ['name' => ucfirst($name)]);
         }
     }
 

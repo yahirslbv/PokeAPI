@@ -76,9 +76,11 @@ $typeColors = [
             </div>
         </div>
     </div>
-    @empty
-        <div class="col-12 text-center mt-5">
-            <p class="text-muted fs-5">No se encontró ningún Pokémon.</p>
+        @empty
+        <div class="col-12 w-100 mt-5">
+            <div class="text-center py-5 shadow-sm rounded-4" style="background-color: #111827; border: 1px solid #1f2937;">
+                <p class="fs-4 text-muted mb-0 italic">No se encontró ningún Pokémon con esos criterios.</p>
+            </div>
         </div>
     @endforelse
 </div>
