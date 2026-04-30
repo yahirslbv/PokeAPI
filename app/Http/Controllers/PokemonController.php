@@ -21,6 +21,10 @@ class PokemonController extends Controller
 
     public function index(Request $request)
     {
+        if ($request->has('search') && $request->input('search') === null) {
+            return redirect()->route('pokemon.index')->withErrors(['search' => 'El campo de búsqueda no puede estar vacío.']);
+        }
+
         $search = strtolower(trim($request->input('search')));
         $typeFilter = strtolower(trim($request->input('type')));
 

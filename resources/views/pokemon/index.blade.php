@@ -31,6 +31,11 @@ $typeColors = [
                 <a href="{{ route('pokemon.index') }}" class="btn btn-outline-secondary">Limpiar</a>
             @endif
         </form>
+        
+        <!-- NUEVO: Mostrar el mensaje de error de validación -->
+        @error('search')
+            <div class="text-danger small mt-2 fw-bold text-center bg-dark rounded p-1">{{ $message }}</div>
+        @enderror
     </div>
 </div>
 
