@@ -3,27 +3,34 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Pokemon;
+use App\Services\PokeApiService; // Importamos el servicio OBLIGATORIO
 
 class PokemonController extends Controller
 {
+    protected $pokeApi;
+
+    // Inyección de dependencias: Laravel nos pasa el servicio automáticamente
+    public function __construct(PokeApiService $pokeApi)
+    {
+        $this->pokeApi = $pokeApi;
+    }
+
     public function index(Request $request)
     {
         $search = strtolower(trim($request->input('search')));
         $typeFilter = strtolower(trim($request->input('type')));
 
         try {
-            // Intentamos obtener la lista de internet
+            // USAMOS EL SERVICIO EN LUGAR DE HTTP DIRECTO
             $allPokemons = Cache::remember('all_pokemon_names_v1', 86400, function () {
-                $response = Http::timeout(5)->withoutVerifying()->get('https://pokeapi.co/api/v2/pokemon?limit=1500');
+                $response = $this->pokeApi->getList(1500);
                 return $response->successful() ? $response->json()['results'] : [];
             });
         } catch (\Exception $e) {
-            // Si no hay internet, usamos solo los guardados localmente para el catálogo
             $allPokemons = [];
         }
 
@@ -32,7 +39,8 @@ class PokemonController extends Controller
         if ($typeFilter && !empty($filteredList)) {
             try {
                 $typeData = Cache::remember("pokemon_type_{$typeFilter}", 86400, function () use ($typeFilter) {
-                    $response = Http::timeout(5)->withoutVerifying()->get("https://pokeapi.co/api/v2/type/{$typeFilter}");
+                    // USAMOS EL SERVICIO
+                    $response = $this->pokeApi->getType($typeFilter);
                     return $response->successful() ? $response->json()['pokemon'] : [];
                 });
                 $typeNames = array_map(fn($item) => $item['pokemon']['name'], $typeData);
@@ -53,7 +61,8 @@ class PokemonController extends Controller
             $id = basename($item['url']);
             try {
                 $pokemonDetail = Cache::remember("pokemon_detail_v2_{$id}", 86400, function () use ($item) {
-                    $detailResponse = Http::timeout(5)->withoutVerifying()->get($item['url']);
+                    // USAMOS EL SERVICIO
+                    $detailResponse = $this->pokeApi->getFromUrl($item['url']);
                     return $detailResponse->successful() ? $detailResponse->json() : null;
                 });
 
@@ -71,7 +80,6 @@ class PokemonController extends Controller
             }
         }
 
-        // Marcar favoritos
         $favNames = Auth::check() ? Pokemon::where('user_id', Auth::id())->pluck('name')->toArray() : [];
         foreach ($pokemons as $key => $p) {
             $pokemons[$key]['is_favorite'] = in_array($p['name'], $favNames);
@@ -87,15 +95,15 @@ class PokemonController extends Controller
         $name = strtolower($name);
         
         try {
-            // 1. INTENTAMOS CONECTARNOS A INTERNET PRIMERO (con límite de 5 segundos)
-            $response = Http::timeout(5)->withoutVerifying()->get("https://pokeapi.co/api/v2/pokemon/" . $name);
+            // USAMOS EL SERVICIO
+            $response = $this->pokeApi->getPokemon($name);
 
             if ($response->failed()) {
                 return view('pokemon.error', ['name' => $name]);
             }
 
             $data = $response->json();
-            $speciesResponse = Http::withoutVerifying()->get($data['species']['url']);
+            $speciesResponse = $this->pokeApi->getFromUrl($data['species']['url']);
             $speciesData = $speciesResponse->successful() ? $speciesResponse->json() : null;
 
             $descripcion = 'No hay descripción disponible.';
@@ -110,7 +118,7 @@ class PokemonController extends Controller
                 $esGenus = collect($speciesData['genera'])->firstWhere('language.name', 'es');
                 if ($esGenus) { $genus = $esGenus['genus']; }
 
-                $evolutionResponse = Http::withoutVerifying()->get($speciesData['evolution_chain']['url']);
+                $evolutionResponse = $this->pokeApi->getFromUrl($speciesData['evolution_chain']['url']);
                 if ($evolutionResponse->successful()) {
                     $evoluciones = $this->parseEvolutionChain($evolutionResponse->json()['chain']);
                 }
@@ -141,11 +149,9 @@ class PokemonController extends Controller
             return view('pokemon.show', compact('pokemon', 'esFavorito'));
 
         } catch (\Exception $e) {
-            // 2. MODO OFFLINE: Si falla la conexión, buscamos en la base de datos local
             $pokemonLocal = Pokemon::where('name', ucfirst($name))->first();
 
             if ($pokemonLocal) {
-                // Reconstruimos el arreglo usando los datos de SQLite
                 $pokemon = [
                     'pokedex_number' => $pokemonLocal->pokedex_number,
                     'name' => $pokemonLocal->name,
@@ -168,13 +174,11 @@ class PokemonController extends Controller
                     'evoluciones' => is_array($pokemonLocal->evolution_chain) ? $pokemonLocal->evolution_chain : json_decode($pokemonLocal->evolution_chain, true) ?? []
                 ];
 
-                // Si lo encontramos en la DB local de este usuario, marcamos la estrella
                 $esFavorito = Auth::check() && $pokemonLocal->user_id === Auth::id();
                 
                 return view('pokemon.show', compact('pokemon', 'esFavorito'));
             }
 
-            // Si no hay internet y tampoco está guardado en SQLite, mandamos a la vista de error
             return view('pokemon.error', ['name' => $name]);
         }
     }
@@ -208,27 +212,24 @@ class PokemonController extends Controller
         }
 
         try {
-            // Descargamos datos básicos
-            $data = Http::timeout(5)->withoutVerifying()->get("https://pokeapi.co/api/v2/pokemon/".strtolower($name))->json();
+            // USAMOS EL SERVICIO
+            $data = $this->pokeApi->getPokemon($name)->json();
             $id = $data['id'];
 
-            // Descargamos datos de especie para la descripción y evolución
-            $speciesResponse = Http::timeout(5)->withoutVerifying()->get($data['species']['url'])->json();
+            $speciesResponse = $this->pokeApi->getFromUrl($data['species']['url'])->json();
             $desc = collect($speciesResponse['flavor_text_entries'])->firstWhere('language.name', 'es')['flavor_text'] ?? 'Sin descripción';
             $genus = collect($speciesResponse['genera'])->firstWhere('language.name', 'es')['genus'] ?? 'Pokémon';
             
-            $evoResponse = Http::timeout(5)->withoutVerifying()->get($speciesResponse['evolution_chain']['url'])->json();
+            $evoResponse = $this->pokeApi->getFromUrl($speciesResponse['evolution_chain']['url'])->json();
             $evoluciones = $this->parseEvolutionChain($evoResponse['chain']);
 
-            // Descargamos imágenes
-            $imgCont = Http::timeout(5)->withoutVerifying()->get($data['sprites']['front_default'])->body();
+            $imgCont = $this->pokeApi->getFromUrl($data['sprites']['front_default'])->body();
             $animUrl = $data['sprites']['other']['showdown']['front_default'] ?? $data['sprites']['front_default'];
-            $animCont = Http::timeout(5)->withoutVerifying()->get($animUrl)->body();
+            $animCont = $this->pokeApi->getFromUrl($animUrl)->body();
 
             Storage::disk('public')->put("pokemon/{$id}.png", $imgCont);
             Storage::disk('public')->put("pokemon/{$id}.gif", $animCont);
 
-            // Guardamos todo en la base de datos (Requiere actualización en Migración y Modelo)
             Pokemon::create([
                 'user_id' => $userId,
                 'pokedex_number' => $id,
@@ -259,5 +260,24 @@ class PokemonController extends Controller
     {
         $pokemons = Pokemon::where('user_id', Auth::id())->get()->toArray();
         return view('pokemon.favorites', compact('pokemons'));
+    }
+
+    // MISIÓN EQUIPO 5: Exportar JSON
+    public function export($name)
+    {
+        $pokemon = Pokemon::where('name', ucfirst($name))->orWhere('name', strtolower($name))->first();
+
+        if (!$pokemon) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pokémon no encontrado en la base local'
+            ], 404);
+        }
+
+        return response()->json(
+            $pokemon->toExportFormat(), 
+            200, 
+            ['Content-Type' => 'application/json']
+        );
     }
 }

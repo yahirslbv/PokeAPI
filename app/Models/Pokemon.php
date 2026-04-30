@@ -17,4 +17,15 @@ class Pokemon extends Model
         'types' => 'array',
         'evolution_chain' => 'array',
     ];
+    // Método para la misión del Equipo 5
+    public function toExportFormat()
+    {
+        return [
+            'name' => $this->name ?? 'Desconocido',
+            'types' => is_array($this->types) ? $this->types : (is_string($this->types) && $this->types !== '' ? json_decode($this->types, true) : []),
+            'hp' => $this->hp ?? 0,
+            'attack' => $this->attack ?? 0,
+            'defense' => $this->defense ?? 0,
+        ];
+    }
 }
