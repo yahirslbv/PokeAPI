@@ -50,10 +50,12 @@ $typeColors = [
             @endauth
 
             <div class="text-center pt-4 pokedex-image-container">
+                <!-- Solo dejamos la imagen principal visible -->
                 <img src="{{ $pokemon['image'] }}" 
                      onmouseover="this.src='{{ $pokemon['animated'] }}'" 
                      onmouseout="this.src='{{ $pokemon['image'] }}'" 
-                     class="img-fluid pokedex-img-hover"
+                     class="img-fluid pokedex-img-hover main-pokemon-img"
+                     data-animated="{{ $pokemon['animated'] }}"
                      alt="{{ $pokemon['name'] }}" 
                      style="image-rendering: pixelated; width: 110px; height: 110px; object-fit: contain;">
             </div>
@@ -91,4 +93,19 @@ $typeColors = [
     .card:hover .pokedex-img-hover { transform: scale(1.1) translateY(-10px); filter: drop-shadow(0 10px 15px rgba(46, 194, 195, 0.6)); }
     form button:hover { transform: scale(1.2); transition: 0.2s; }
 </style>
+
+<script>
+    // ESTA ES LA MAGIA: Espera a que las imágenes estáticas y la página carguen por completo...
+    document.addEventListener("DOMContentLoaded", function() {
+        // ...y luego empieza a descargar los GIFs en segundo plano sin saturar al navegador.
+        const images = document.querySelectorAll('.main-pokemon-img');
+        images.forEach(img => {
+            const gifUrl = img.getAttribute('data-animated');
+            if(gifUrl) {
+                const preloader = new Image();
+                preloader.src = gifUrl;
+            }
+        });
+    });
+</script>
 @endsection

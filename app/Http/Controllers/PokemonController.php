@@ -25,10 +25,15 @@ class PokemonController extends Controller
         $typeFilter = strtolower(trim($request->input('type')));
 
         try {
-            // USAMOS EL SERVICIO EN LUGAR DE HTTP DIRECTO
-            $allPokemons = Cache::remember('all_pokemon_names_v1', 86400, function () {
+            $allPokemons = Cache::remember('all_pokemon_names_v2', 86400, function () {
                 $response = $this->pokeApi->getList(1500);
-                return $response->successful() ? $response->json()['results'] : [];
+                
+                // CORRECCIÓN: Si falla, lanzamos error para EVITAR que se guarde el vacío en caché
+                if ($response->failed()) {
+                    throw new \Exception("Error de conexión con PokéAPI");
+                }
+                
+                return $response->json()['results'];
             });
         } catch (\Exception $e) {
             $allPokemons = [];
@@ -38,15 +43,20 @@ class PokemonController extends Controller
 
         if ($typeFilter && !empty($filteredList)) {
             try {
-                $typeData = Cache::remember("pokemon_type_{$typeFilter}", 86400, function () use ($typeFilter) {
-                    // USAMOS EL SERVICIO
+                $typeData = Cache::remember("pokemon_type_v2_{$typeFilter}", 86400, function () use ($typeFilter) {
                     $response = $this->pokeApi->getType($typeFilter);
-                    return $response->successful() ? $response->json()['pokemon'] : [];
+                    
+                    // CORRECCIÓN MÚLTIPLE: Evitamos que el caché guarde filtros fallidos
+                    if ($response->failed()) {
+                        throw new \Exception("Error al filtrar en PokéAPI");
+                    }
+                    
+                    return $response->json()['pokemon'];
                 });
                 $typeNames = array_map(fn($item) => $item['pokemon']['name'], $typeData);
                 $filteredList = array_filter($filteredList, fn($item) => in_array($item['name'], $typeNames));
             } catch (\Exception $e) {
-                // Falla silenciosa si no hay red para los filtros
+                // Falla silenciosa
             }
         }
 
@@ -98,8 +108,6 @@ class PokemonController extends Controller
             // USAMOS EL SERVICIO
             $response = $this->pokeApi->getPokemon($name);
 
-            // CORRECCIÓN: Si la API falla (sin internet, timeout, o 404), 
-            // lanzamos una excepción a propósito para forzar que pase al bloque "catch" (Modo Offline).
             if ($response->failed()) {
                 throw new \Exception("Fallo en la API, intentando modo offline...");
             }
