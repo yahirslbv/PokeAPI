@@ -18,7 +18,6 @@ class PokemonRoutesFeatureTest extends TestCase
         $response = $this->get('/');
         $response->assertStatus(200);
     }
-
     // 3. GET /about responde 200 (Acerca de).
     public function test_ruta_about_carga_correctamente_estado_200()
     {
@@ -26,7 +25,6 @@ class PokemonRoutesFeatureTest extends TestCase
         $response = $this->actingAs($user)->get('/about');
         $response->assertStatus(200);
     }
-
     // Prueba de seguridad de rutas protegidas
     public function test_rutas_protegidas_redirigen_al_login_si_no_hay_sesion()
     {

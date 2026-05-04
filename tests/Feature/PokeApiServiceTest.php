@@ -8,10 +8,9 @@ use App\Services\PokeApiService;
 
 class PokeApiServiceTest extends TestCase
 {
-    // Autor: Victor Yahir Medrano Barrera
     public function test_servicio_pokeapi_devuelve_datos_correctos_sin_internet()
     {
-        // TÉCNICA OBLIGATORIA: Simulamos la respuesta de la API (Mocking)
+        // Simulamos la respuesta de la API (Mocking)
         Http::fake([
             'pokeapi.co/*' => Http::response(['name' => 'pikachu', 'id' => 25], 200)
         ]);
@@ -24,10 +23,9 @@ class PokeApiServiceTest extends TestCase
         $this->assertEquals('pikachu', $response->json()['name']);
     }
 
-    // Autor: Victor Yahir Medrano Barrera
     public function test_servicio_pokeapi_maneja_error_404_correctamente()
     {
-        // TÉCNICA OBLIGATORIA: Simulamos que la API falla o el Pokémon no existe
+        // Simulamos que la API falla o el Pokémon no existe
         Http::fake([
             'pokeapi.co/*' => Http::response(null, 404)
         ]);

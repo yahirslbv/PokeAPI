@@ -7,13 +7,13 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Pokemon;
-use App\Services\PokeApiService; // Importamos el servicio OBLIGATORIO
+use App\Services\PokeApiService; 
+use App\Services\PokemonMapper;  
 
 class PokemonController extends Controller
 {
     protected $pokeApi;
 
-    // Inyección de dependencias: Laravel nos pasa el servicio automáticamente
     public function __construct(PokeApiService $pokeApi)
     {
         $this->pokeApi = $pokeApi;
@@ -21,6 +21,7 @@ class PokemonController extends Controller
 
     public function index(Request $request)
     {
+        // NUEVO: Validación de buscador vacío (Punto 6 del Examen)
         if ($request->has('search') && $request->input('search') === null) {
             return redirect()->route('pokemon.index')->withErrors(['search' => 'El campo de búsqueda no puede estar vacío.']);
         }
@@ -138,23 +139,28 @@ class PokemonController extends Controller
                 }
             }
 
-            $stats = [];
-            foreach ($data['stats'] as $stat) {
-                $stats[$stat['stat']['name']] = $stat['base_stat'];
-            }
-            $stats['total'] = array_sum(array_values($stats));
+            // USAMOS EL MAPPER OFICIAL (Cumpliendo la rúbrica A.1)
+            $mappedData = PokemonMapper::map($data);
 
             $pokemon = [
                 'pokedex_number' => $data['id'],
-                'name' => ucfirst($data['name']),
+                'name' => ucfirst($mappedData['name']), // Usamos el nombre limpio del mapper
                 'species' => $genus,
                 'image' => $data['sprites']['front_default'],
                 'animated' => $data['sprites']['other']['showdown']['front_default'] ?? $data['sprites']['front_default'],
-                'types' => array_map(fn($t) => $t['type']['name'], $data['types']),
+                'types' => $mappedData['types'], // Tipos extraídos por el mapper
                 'descripcion' => $descripcion,
                 'height' => $data['height'] / 10,
                 'weight' => $data['weight'] / 10,
-                'stats' => $stats,
+                'stats' => [
+                    'hp' => $mappedData['hp'],           // HP desde el mapper
+                    'attack' => $mappedData['attack'],   // Ataque desde el mapper
+                    'defense' => $mappedData['defense'], // Defensa desde el mapper
+                    'special-attack' => $data['stats'][3]['base_stat'] ?? 0,
+                    'special-defense' => $data['stats'][4]['base_stat'] ?? 0,
+                    'speed' => $data['stats'][5]['base_stat'] ?? 0,
+                    'total' => array_sum(array_column($data['stats'], 'base_stat'))
+                ],
                 'evoluciones' => $evoluciones
             ];
 
